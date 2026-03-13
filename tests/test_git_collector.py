@@ -15,6 +15,8 @@ from standup_ai.git_collector import (
     collect_commits,
     get_default_since,
     get_current_author,
+    get_yesterday_range,
+    get_days_range,
     _find_git_repos,
 )
 
@@ -177,6 +179,58 @@ class TestCollectCommits:
         # should not match 'bob'
         result2 = collect_commits([str(tmp_path)], since, author_filter="bob")
         assert len(result2) == 0
+
+
+class TestGetYesterdayRange:
+    def test_returns_tuple_of_datetimes(self):
+        since, until = get_yesterday_range()
+        assert since.tzinfo is not None
+        assert until.tzinfo is not None
+
+    def test_since_before_until(self):
+        since, until = get_yesterday_range()
+        assert since < until
+
+    def test_range_is_one_day(self):
+        since, until = get_yesterday_range()
+        delta = until - since
+        assert delta.total_seconds() == 86400  # exactly 24 hours
+
+    def test_until_is_today_midnight(self):
+        from datetime import date
+        since, until = get_yesterday_range()
+        today = date.today()
+        assert until.date() == today
+
+    def test_since_is_yesterday_midnight(self):
+        from datetime import date, timedelta
+        since, until = get_yesterday_range()
+        yesterday = date.today() - timedelta(days=1)
+        assert since.date() == yesterday
+
+
+class TestGetDaysRange:
+    def test_returns_utc_aware(self):
+        result = get_days_range(3)
+        assert result.tzinfo is not None
+
+    def test_3_days_ago(self):
+        from datetime import date, timedelta
+        result = get_days_range(3)
+        expected_date = date.today() - timedelta(days=3)
+        assert result.date() == expected_date
+
+    def test_1_day_is_yesterday_start(self):
+        from datetime import date, timedelta
+        result = get_days_range(1)
+        yesterday = date.today() - timedelta(days=1)
+        assert result.date() == yesterday
+
+    def test_midnight_start(self):
+        result = get_days_range(2)
+        assert result.hour == 0
+        assert result.minute == 0
+        assert result.second == 0
 
 
 class TestGetCurrentAuthor:

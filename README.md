@@ -4,16 +4,16 @@
 
 ```bash
 standup-ai                         # scan current dir, auto-detect provider
-standup-ai ~/projects ~/work       # scan multiple project directories
+standup-ai --yesterday             # only commits from yesterday
+standup-ai --days 3                # last 3 calendar days
 standup-ai --style slack --copy    # Slack format, copy to clipboard
-standup-ai --hours 48              # look back 2 days
 standup-ai --provider ollama       # no API key needed
 ```
 
 [![PyPI version](https://img.shields.io/pypi/v/standup-ai.svg)](https://pypi.org/project/standup-ai/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-55%20passing-brightgreen.svg)](https://github.com/faw21/standup-ai)
+[![Tests](https://img.shields.io/badge/tests-83%20passing-brightgreen.svg)](https://github.com/faw21/standup-ai)
 
 ---
 
@@ -91,11 +91,14 @@ standup-ai
 # Scan multiple project directories
 standup-ai ~/projects ~/side-projects
 
+# Only commits from yesterday (great for morning standups)
+standup-ai --yesterday
+
+# Last 3 calendar days (e.g. Monday morning covering the weekend)
+standup-ai --days 3
+
 # Slack format, copy to clipboard
 standup-ai --style slack --copy
-
-# Look back 2 days (e.g. Monday morning for Friday+weekend)
-standup-ai --hours 48
 
 # No API key needed — use Ollama
 standup-ai --provider ollama --model llama3.2
@@ -106,6 +109,25 @@ standup-ai --show-commits
 # Raw output for piping
 standup-ai --raw > standup.txt
 ```
+
+---
+
+## Config File
+
+Save your defaults in `~/.standup.yaml` so you never have to type them again:
+
+```yaml
+# ~/.standup.yaml
+paths:
+  - ~/projects
+  - ~/work
+style: slack
+provider: claude
+# author: "Your Name"   # override git user.name
+# hours: 24             # default time window
+```
+
+Any CLI flag still overrides the config file.
 
 ---
 
@@ -171,20 +193,24 @@ Shipped JWT auth and fixed a prod bug
 standup-ai [PATH...] [OPTIONS]
 
 Arguments:
-  PATH...          Directories to scan (default: current directory)
+  PATH...           Directories to scan (default: current directory or ~/.standup.yaml paths)
+
+Time window (mutually exclusive):
+  --yesterday       Only commits from yesterday (midnight to midnight, local time)
+  --days INT        Last N calendar days (from start of day N days ago)
+  --hours INT       How many hours back to look [default: 24]
 
 Options:
-  --hours INT      How many hours back to look [default: 24]
-  --author TEXT    Filter by author name/email (auto-detected if not set)
-  --no-filter      Include all authors (don't filter to current user)
-  --provider       claude | openai | ollama (auto-detected from env)
-  --model TEXT     Override model name
-  --style          standard | bullet | slack [default: standard]
-  --copy           Copy output to clipboard
-  --raw            Plain text output (no formatting)
-  --show-commits   Print raw commits found before generating
-  -V, --version    Show version
-  -h, --help       Show this message and exit
+  --author TEXT     Filter by author name/email (auto-detected if not set)
+  --no-filter       Include all authors (don't filter to current user)
+  --provider        claude | openai | ollama (auto-detected from env)
+  --model TEXT      Override model name
+  --style           standard | bullet | slack [default: standard]
+  --copy            Copy output to clipboard
+  --raw             Plain text output (no formatting)
+  --show-commits    Print raw commits found before generating
+  -V, --version     Show version
+  -h, --help        Show this message and exit
 ```
 
 ---
@@ -192,14 +218,17 @@ Options:
 ## Tips
 
 ```bash
-# Monday morning -- get Friday + weekend commits
-standup-ai --hours 72
+# Monday morning standup (covers the weekend)
+standup-ai --yesterday --days 3
+
+# Monday morning — all commits since Friday
+standup-ai --days 3
 
 # Team standup: see what everyone did (no author filter)
-standup-ai --no-filter --hours 24
+standup-ai --no-filter
 
 # Add to your shell as an alias
-alias standup='standup-ai ~/projects --style slack --copy'
+alias standup='standup-ai --yesterday --style slack --copy'
 
 # See what commits were found before generating
 standup-ai --show-commits --provider ollama
@@ -214,7 +243,7 @@ git clone https://github.com/faw21/standup-ai
 cd standup-ai
 python -m venv .venv && source .venv/bin/activate
 .venv/bin/pip install -e ".[dev]"
-pytest tests/   # 55 tests, 88% coverage
+pytest tests/   # 83 tests, 89% coverage
 ```
 
 ---

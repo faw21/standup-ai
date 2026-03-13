@@ -38,7 +38,7 @@ class TestCLIVersion:
         runner = CliRunner()
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.1.0" in result.output
+        assert "0.2.0" in result.output
 
     def test_help_flag(self):
         runner = CliRunner()
@@ -172,6 +172,124 @@ class TestCLIWithCommits:
         runner = CliRunner()
         result = runner.invoke(main, ["--provider", "claude", "--no-filter"])
         assert result.exit_code == 0
+
+
+class TestCLITimeFlagsMutualExclusion:
+    def test_hours_and_yesterday_conflict(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ["--hours", "24", "--yesterday"])
+        assert result.exit_code == 1
+        assert "mutually exclusive" in result.output.lower() or "mutually exclusive" in (result.stderr or "")
+
+    def test_hours_and_days_conflict(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ["--hours", "24", "--days", "3"])
+        assert result.exit_code == 1
+
+    def test_yesterday_and_days_conflict(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ["--yesterday", "--days", "3"])
+        assert result.exit_code == 1
+
+
+class TestCLIYesterdayFlag:
+    @patch("standup_ai.cli.create_provider")
+    @patch("standup_ai.cli.collect_commits")
+    @patch("standup_ai.cli.get_current_author", return_value=None)
+    def test_yesterday_passes_until(self, mock_author, mock_collect, mock_provider_factory):
+        mock_collect.return_value = [make_commit()]
+        mock_provider = MagicMock()
+        mock_provider.complete.return_value = FAKE_STANDUP
+        mock_provider_factory.return_value = mock_provider
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--provider", "claude", "--yesterday"])
+        assert result.exit_code == 0
+        call_kwargs = mock_collect.call_args
+        # should have passed `until` kwarg
+        assert call_kwargs[1].get("until") is not None
+
+    @patch("standup_ai.cli.collect_commits", return_value=[])
+    @patch("standup_ai.cli.get_current_author", return_value=None)
+    def test_yesterday_no_commits_message(self, mock_author, mock_collect):
+        runner = CliRunner()
+        result = runner.invoke(main, ["--yesterday", "--no-filter"])
+        assert result.exit_code == 0
+        assert "yesterday" in result.output.lower()
+
+
+class TestCLIDaysFlag:
+    @patch("standup_ai.cli.create_provider")
+    @patch("standup_ai.cli.collect_commits")
+    @patch("standup_ai.cli.get_current_author", return_value=None)
+    def test_days_flag_works(self, mock_author, mock_collect, mock_provider_factory):
+        mock_collect.return_value = [make_commit()]
+        mock_provider = MagicMock()
+        mock_provider.complete.return_value = FAKE_STANDUP
+        mock_provider_factory.return_value = mock_provider
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--provider", "claude", "--days", "3"])
+        assert result.exit_code == 0
+
+    @patch("standup_ai.cli.collect_commits", return_value=[])
+    @patch("standup_ai.cli.get_current_author", return_value=None)
+    def test_days_no_commits_message(self, mock_author, mock_collect):
+        runner = CliRunner()
+        result = runner.invoke(main, ["--days", "3", "--no-filter"])
+        assert result.exit_code == 0
+        assert "3 day" in result.output
+
+
+class TestCLIConfigFile:
+    @patch("standup_ai.cli.load_config")
+    @patch("standup_ai.cli.create_provider")
+    @patch("standup_ai.cli.collect_commits")
+    @patch("standup_ai.cli.get_current_author", return_value=None)
+    def test_config_style_used_when_no_cli_style(self, mock_author, mock_collect, mock_factory, mock_config):
+        mock_config.return_value = {"style": "slack"}
+        mock_collect.return_value = [make_commit()]
+        mock_provider = MagicMock()
+        mock_provider.complete.return_value = FAKE_STANDUP
+        mock_factory.return_value = mock_provider
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--provider", "claude"])
+        assert result.exit_code == 0
+        # slack style should be used
+        assert "slack" in result.output.lower()
+
+    @patch("standup_ai.cli.load_config")
+    @patch("standup_ai.cli.create_provider")
+    @patch("standup_ai.cli.collect_commits")
+    @patch("standup_ai.cli.get_current_author", return_value=None)
+    def test_cli_style_overrides_config(self, mock_author, mock_collect, mock_factory, mock_config):
+        mock_config.return_value = {"style": "slack"}
+        mock_collect.return_value = [make_commit()]
+        mock_provider = MagicMock()
+        mock_provider.complete.return_value = FAKE_STANDUP
+        mock_factory.return_value = mock_provider
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--provider", "claude", "--style", "bullet"])
+        assert result.exit_code == 0
+        assert "bullet" in result.output.lower()
+
+    @patch("standup_ai.cli.load_config")
+    @patch("standup_ai.cli.create_provider")
+    @patch("standup_ai.cli.collect_commits")
+    @patch("standup_ai.cli.get_current_author", return_value=None)
+    def test_config_provider_used_when_no_cli_provider(self, mock_author, mock_collect, mock_factory, mock_config):
+        mock_config.return_value = {"provider": "openai"}
+        mock_collect.return_value = [make_commit()]
+        mock_provider = MagicMock()
+        mock_provider.complete.return_value = FAKE_STANDUP
+        mock_factory.return_value = mock_provider
+
+        runner = CliRunner()
+        result = runner.invoke(main, [])
+        assert result.exit_code == 0
+        mock_factory.assert_called_once_with("openai", None)
 
 
 class TestCLIProviderErrors:

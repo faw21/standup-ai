@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from pathlib import Path
 from typing import Iterator
 
@@ -42,6 +42,7 @@ def _find_git_repos(root: Path, max_depth: int = 2) -> Iterator[Path]:
 def collect_commits(
     paths: list[str],
     since: datetime,
+    until: datetime | None = None,
     author_filter: str | None = None,
     max_repos: int = 20,
 ) -> list[CommitInfo]:
@@ -50,6 +51,7 @@ def collect_commits(
     Args:
         paths: List of directory paths to search for git repos.
         since: Only include commits after this timestamp.
+        until: Only include commits before this timestamp (optional).
         author_filter: If set, only include commits by this author (substring match).
         max_repos: Max number of repos to scan.
 
@@ -75,7 +77,7 @@ def collect_commits(
                 repo = git.Repo(repo_path)
                 repo_name = repo_path.name
                 result.extend(
-                    _collect_from_repo(repo, repo_name, str(repo_path), since, author_filter)
+                    _collect_from_repo(repo, repo_name, str(repo_path), since, until, author_filter)
                 )
             except (git.InvalidGitRepositoryError, git.NoSuchPathError, ValueError):
                 continue
@@ -89,12 +91,16 @@ def _collect_from_repo(
     repo_name: str,
     repo_path: str,
     since: datetime,
+    until: datetime | None,
     author_filter: str | None,
 ) -> list[CommitInfo]:
     """Collect commits from a single repo."""
     commits: list[CommitInfo] = []
     try:
-        for commit in repo.iter_commits(since=since.isoformat()):
+        iter_kwargs: dict = {"since": since.isoformat()}
+        if until is not None:
+            iter_kwargs["until"] = until.isoformat()
+        for commit in repo.iter_commits(**iter_kwargs):
             if author_filter and author_filter.lower() not in commit.author.name.lower():
                 if author_filter.lower() not in commit.author.email.lower():
                     continue
@@ -134,6 +140,23 @@ def _collect_from_repo(
 def get_default_since(hours: int = 24) -> datetime:
     """Return a timezone-aware datetime N hours ago."""
     return datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+
+
+def get_yesterday_range() -> tuple[datetime, datetime]:
+    """Return (start, end) for yesterday in local time, as UTC-aware datetimes."""
+    local_tz = datetime.now().astimezone().tzinfo
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    since = datetime(yesterday.year, yesterday.month, yesterday.day, 0, 0, 0, tzinfo=local_tz)
+    until = datetime(today.year, today.month, today.day, 0, 0, 0, tzinfo=local_tz)
+    return since, until
+
+
+def get_days_range(n: int) -> datetime:
+    """Return start-of-day N days ago in local time, as a UTC-aware datetime."""
+    local_tz = datetime.now().astimezone().tzinfo
+    target = date.today() - timedelta(days=n)
+    return datetime(target.year, target.month, target.day, 0, 0, 0, tzinfo=local_tz)
 
 
 def get_current_author(paths: list[str]) -> str | None:
